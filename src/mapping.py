@@ -16,9 +16,7 @@ import torch.nn.functional as F
 from pathlib import Path
 import open3d as o3d
 
-torch.classes.load_library(
-    "/home/pl21n4/Programmes/Vox-Fusion/third_party/sparse_octree/build/lib.linux-x86_64-cpython-38/svo.cpython-38-x86_64-linux-gnu.so")
-
+torch.classes.load_library("third_party/sparse_octree/build/lib.linux-x86_64-3.8/svo.cpython-38-x86_64-linux-gnu.so")
 
 def get_network_size(net):
     size = 0
@@ -89,7 +87,7 @@ class Mapping:
         verbose = get_property(args.debug_args, "verbose", False)
         self.profiler = Profiler(verbose=verbose)
         self.profiler.enable()
-        
+    # spin is the loop function in the thread.    
     def spin(self, share_data, kf_buffer):
         print("mapping process started!!!!!!!!!")
         while True:
@@ -101,6 +99,7 @@ class Mapping:
                     self.first_frame_id = tracked_frame.index
                     if self.mesher is not None:
                         self.mesher.rays_d = tracked_frame.get_rays()
+                    # create voxel for the mlp.
                     self.create_voxels(tracked_frame)
                     self.insert_keyframe(tracked_frame)
                     while kf_buffer.empty():
@@ -124,6 +123,7 @@ class Mapping:
                 self.frame_poses += [(len(self.keyframe_graph) -
                                       1, rel_pose.cpu())]
 
+                # this more like the bundle adjust ment in the backend?
                 if self.mesh_freq > 0 and (tracked_frame.index) % self.mesh_freq == 0:
                     if self.final_iter and len(self.keyframe_graph) > 20:
                         print(f"********** post-processing steps **********")
@@ -134,6 +134,7 @@ class Mapping:
                         progress_bar.set_description(" post-processing steps")
                         for iter in progress_bar:
                             #tracked_frame=self.keyframe_graph[iter//self.window_size]
+                            # do mapping is the training process.
                             self.do_mapping(share_data, tracked_frame=None,
                                             update_pose=False, update_decoder=False, selection_method='random')
 
@@ -173,6 +174,7 @@ class Mapping:
                    update_pose=True, update_decoder=True, selection_method = 'current'):
         self.profiler.tick("do_mapping")
         self.decoder.train()
+        # decide which frame to do the optimization.
         optimize_targets = self.select_optimize_targets(tracked_frame, selection_method=selection_method)
         torch.cuda.empty_cache()
         self.profiler.tick("bundle_adjust_frames")

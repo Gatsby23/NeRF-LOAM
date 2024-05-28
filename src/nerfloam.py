@@ -38,6 +38,7 @@ class nerfloam:
         self.processes = []
 
     def start(self):
+        # mp in here is the multi processing.
         mapping_process = mp.Process(
             target=self.mapper.spin, args=(self.share_data, self.kf_buffer))
         mapping_process.start()

@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import tinycudann as tcnn
+import sys
 
 class GaussianFourierFeatureTransform(torch.nn.Module):
     """
@@ -88,6 +89,7 @@ class Decoder(nn.Module):
                  embedder='none',
                  point_dim=3,
                  local_coord=False,
+                 use_tiny_cuda_nn=True,
                  **kwargs) -> None:
         super().__init__()
         self.D = depth
@@ -104,21 +106,43 @@ class Decoder(nn.Module):
             raise NotImplementedError("unknown positional encoder")
         self.pts_linears = nn.ModuleList(
             [nn.Linear(self.pe.embedding_size, width)] + [nn.Linear(width, width) if i not in self.skips else nn.Linear(width + self.pe.embedding_size, width) for i in range(depth-1)])
-        self.sdf_out = nn.Linear(width, 1)
+        if use_tiny_cuda_nn:
+            self.hash_sdf_out = tcnn.NetworkWithInputEncoding(
+                n_input_dims=3, n_output_dims=1,
+                encoding_config={
+                    "otype": "Grid",
+                    "type": "Hash",
+                    "n_levels": 4,
+                    "n_features_per_level": 2,
+                    "log2_hashmap_size": 19,
+                    "base_resolution": 16,  # 1/base_resolution is the grid_size
+                    "per_level_scale": 2.0,
+                    "interpolation": "Linear"
+                },
+                network_config={
+                    "otype": "FullyFusedMLP",
+                    "activation": "ReLU",
+                    "output_activation": "None",
+                    "n_neurons": 64,
+                    "n_hidden_la2yers": 1,
+                }
+            )
 
-    def get_values(self, input):
-        x = self.pe(input)
+    def get_values(self, inputs):
+        x = self.pe(inputs)
         # point = input[:, -3:]
-        h = x
-        for i, l in enumerate(self.pts_linears):
-            h = self.pts_linears[i](h)
-            h = F.relu(h)
-            if i in self.skips:
-                h = torch.cat([x, h], -1)
+        h = x.cuda()
+        # h = x
+        # for i, l in enumerate(self.pts_linears):
+        #     h = self.pts_linears[i](h)
+        #     h = F.relu(h)
+        #     if i in self.skips:
+        #         h = torch.cat([x, h], -1)
 
         # outputs = self.output_linear(h)
         # outputs[:, :3] = torch.sigmoid(outputs[:, :3])
-        sdf_out = self.sdf_out(h)
+        # sdf_out = self.sdf_out(h)
+        sdf_out = self.hash_sdf_out(h)
 
         return sdf_out
 
