@@ -142,10 +142,10 @@ class Decoder(nn.Module):
             self.backbone = tcnn.Network(
             n_input_dims=32,n_output_dims=1,
             network_config={
-                "otype": "FullyFusedMLP",
+                "otype": "CutlassMLP",
                 "activation": "ReLU",
                 "output_activation": "None",
-                "n_neurons": 128,
+                "n_neurons": 256,
                 "n_hidden_layers": 2,
             },
             )

@@ -43,4 +43,4 @@ mapper_specs:
 
 debug_args:
   verbose: False
-  mesh_freq: 100
+  mesh_freq: 20
