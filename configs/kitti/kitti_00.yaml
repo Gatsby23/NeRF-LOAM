@@ -12,5 +12,5 @@ data_specs:
 
 tracker_specs:
   start_frame: 0
-  end_frame: 101
+  end_frame: 1
   read_offset: 1

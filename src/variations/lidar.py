@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import tinycudann as tcnn
+import numpy as np
 import sys
 
 class GaussianFourierFeatureTransform(torch.nn.Module):
@@ -107,29 +108,56 @@ class Decoder(nn.Module):
         self.pts_linears = nn.ModuleList(
             [nn.Linear(self.pe.embedding_size, width)] + [nn.Linear(width, width) if i not in self.skips else nn.Linear(width + self.pe.embedding_size, width) for i in range(depth-1)])
         if use_tiny_cuda_nn:
-            self.hash_sdf_out = tcnn.NetworkWithInputEncoding(
-                n_input_dims=3, n_output_dims=1,
-                encoding_config={
-                    "otype": "Grid",
-                    "type": "Hash",
-                    "n_levels": 4,
-                    "n_features_per_level": 2,
-                    "log2_hashmap_size": 19,
-                    "base_resolution": 16,  # 1/base_resolution is the grid_size
-                    "per_level_scale": 2.0,
-                    "interpolation": "Linear"
-                },
-                network_config={
-                    "otype": "FullyFusedMLP",
-                    "activation": "ReLU",
-                    "output_activation": "None",
-                    "n_neurons": 64,
-                    "n_hidden_la2yers": 1,
-                }
+            # self.hash_sdf_out = tcnn.NetworkWithInputEncoding(
+            #     n_input_dims=3, n_output_dims=1,
+            #     encoding_config={
+            #         "otype": "Grid",
+            #         "type": "Hash",
+            #         "n_levels": 4,
+            #         "n_features_per_level": 2,
+            #         "log2_hashmap_size": 19,
+            #         "base_resolution": 16,  # 1/base_resolution is the grid_size
+            #         "per_level_scale": 2.0,
+            #         "interpolation": "Linear"
+            #     },
+            #     network_config={
+            #         "otype": "FullyFusedMLP",
+            #         "activation": "ReLU",
+            #         "output_activation": "None",
+            #         "n_neurons": 64,
+            #         "n_hidden_la2yers": 1,
+            #     }
+            # )
+            self.encoder = tcnn.Encoding(
+            n_input_dims=3,
+            encoding_config={
+                "otype": "HashGrid",
+                "n_levels": 16,
+                "n_features_per_level": 2,
+                "log2_hashmap_size": 19,
+                "base_resolution": 16,
+                "per_level_scale": 2,
+            },
+            )
+            self.backbone = tcnn.Network(
+            n_input_dims=32,n_output_dims=1,
+            network_config={
+                "otype": "FullyFusedMLP",
+                "activation": "ReLU",
+                "output_activation": "None",
+                "n_neurons": 128,
+                "n_hidden_layers": 2,
+            },
             )
 
     def get_values(self, inputs):
-        x = self.pe(inputs)
+        aabb = [1960.05, 1973.55, 1997.2501, 2039.55, 2032.3501, 2001.4501]
+        aabb_np = np.array(aabb)
+        aabb_min = torch.tensor(aabb_np[:3].reshape(1, 3)).cuda()
+        aabb_max = torch.tensor(aabb_np[3:].reshape(1, 3)).cuda()
+        aabb_size = aabb_max - aabb_min
+        aabb_inputs = (inputs - aabb_min) / aabb_size
+        x = self.pe(aabb_inputs)
         # point = input[:, -3:]
         h = x.cuda()
         # h = x
@@ -142,8 +170,8 @@ class Decoder(nn.Module):
         # outputs = self.output_linear(h)
         # outputs[:, :3] = torch.sigmoid(outputs[:, :3])
         # sdf_out = self.sdf_out(h)
-        sdf_out = self.hash_sdf_out(h)
-
+        sdf_tmp = self.encoder(h)
+        sdf_out = self.backbone(sdf_tmp)
         return sdf_out
 
     def forward(self, inputs):
