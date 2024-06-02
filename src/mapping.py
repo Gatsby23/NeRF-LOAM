@@ -286,7 +286,6 @@ class Mapping:
         points = frame.get_points().cuda()
         pose = frame.get_pose().cuda()
         print("frame id", frame.index+1)
-        print("trans ", pose[:3, 3]-2000)
         points = points@pose[:3, :3].transpose(-1, -2) + pose[:3, 3]
         voxels = torch.div(points, self.voxel_size, rounding_mode='floor')
         self.svo.insert(voxels.cpu().int())
@@ -341,7 +340,7 @@ class Mapping:
         self.map_states = map_states
 
     @torch.no_grad()
-    def get_updated_poses(self, offset=-2000):
+    def get_updated_poses(self, offset=0):
         for i in range(len(self.frame_poses)):
             ref_frame_ind, rel_pose = self.frame_poses[i]
             ref_frame = self.keyframe_graph[ref_frame_ind]
@@ -376,7 +375,7 @@ class Mapping:
         mesh = self.mesher.create_mesh(
             self.decoder, encoder_states, self.voxel_size, voxels,
             frame_poses=None, depth_maps=None,
-            clean_mseh=clean_mesh, require_color=False, offset=-2000, res=res)
+            clean_mseh=clean_mesh, require_color=False, offset=0, res=res)
         return mesh
 
     @torch.no_grad()

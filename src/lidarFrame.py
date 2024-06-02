@@ -15,7 +15,6 @@ class LidarFrame(nn.Module):
         self.pointsCos = pointsCos
         if (not new_keyframe) and (pose is not None):
             # TODO: fix this offset
-            pose[:3, 3] += 2000
             pose = torch.tensor(pose, requires_grad=True, dtype=torch.float32)
             self.pose = OptimizablePose.from_matrix(pose)
         elif new_keyframe:
